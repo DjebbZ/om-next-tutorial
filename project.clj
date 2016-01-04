@@ -19,7 +19,7 @@
               [{:id "dev"
                 :source-paths ["src" "scripts"]
 
-                :figwheel {:on-jsload "om-next-tutorial.core/on-js-reload"}
+                :figwheel {}
 
                 :compiler {:main om-next-tutorial.core
                            :asset-path "js/compiled/out"
