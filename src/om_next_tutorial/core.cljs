@@ -11,13 +11,26 @@
 
 
 
+;;; Blabla
+
+(declare reconciler AnimalsList)
+
 ;;; Data management
 
-(defonce app-state (atom {:app/title    "Animals"
-                          :animals/list [[1 "Ant"] [2 "Antelope"] [3 "Bird"] [4 "Cat"] [5 "Dog"]
-                                         [6 "Lion"] [7 "Mouse"] [8 "Monkey"] [9 "Snake"] [10 "Zebra"]]}))
+; State
 
-(defmulti read-fn (fn [env key params] key))
+(def initial-state {:app/title    "Animals"
+                    :animals/list [[1 "Ant"] [2 "Antelope"] [3 "Bird"] [4 "Cat"] [5 "Dog"]
+                                   [6 "Lion"] [7 "Mouse"] [8 "Monkey"] [9 "Snake"] [10 "Zebra"]]})
+
+(defonce app-state (atom initial-state))
+
+(defn reset-state! []
+  (reset! app-state initial-state))
+
+; Read
+
+(defmulti read-fn om/dispatch)
 
 (defmethod read-fn :default
   [{:keys [state]} key _]
@@ -27,25 +40,24 @@
       {:value :not-found})))
 
 (defmethod read-fn :animals/list
-  [{:keys [state] :as env} key {:keys [start end]}]
-  {:value (subvec (:animals/list @state) start end)})
+  [{:keys [state]} _ {:keys [start end]}]
+  {:value (subvec (:animals/list @state)
+                  start
+                  (min end (count (:animals/list @state))))})
 
-(defn mutate-fn [{:keys [state] :as env} key {:keys [animal]}]
-  (println (str "mutate fn. key " key))
-  (println animal)
-  (if (= 'remove-animal key)
-    (do
-      (println "act-remove-animal")
-      {:value  {:keys [:animals/list]}
-       :action (fn []
-                 (println "before action")
-                 (println animal)
-                 (println @state)
-                 (swap! state update-in [:animals/list] (fn [st]
-                                                          (remove #(= % animal) st)))
-                 (println "after action")
-                 (println @state))})
-    {:value nil}))
+; Mutate
+
+(defmulti mutate-fn om/dispatch)
+
+(defmethod mutate-fn 'animal/remove
+  [{:keys [state]} _ {:keys [animal]}]
+  {:action (fn []
+             (swap! state update-in [:animals/list] (fn [st]
+                                                      (into [] (remove #(= % animal) st)))))})
+
+(defmethod mutate-fn 'global/reset
+  [_ _ _]
+  {:action reset-state!})
 
 (def reconciler
   (om/reconciler {:state  app-state
@@ -58,7 +70,7 @@
 (defui AnimalsList
   static om/IQueryParams
   (params [_]
-    {:start 0 :end (count (get-in @app-state [:animals/list]))})
+    {:start 0 :end 10})
 
   static om/IQuery
   (query [_]
@@ -75,15 +87,20 @@
                           (dom/li nil
                                   [i
                                    " "
+                                   name
                                    (dom/a
                                      #js {:href    "#"
                                           :key     i
                                           :onClick (fn [e]
                                                      (.preventDefault e)
-                                                     (println "onClick handler")
-                                                     (om/transact! this `[(remove-animal ~{:animal [i name]})]))}
-                                     name)]))
-                        list))))))
+                                                     (om/transact! this `[(animal/remove ~{:animal [i name]})]))}
+                                     " "
+                                     "remove")]))
+                        list))
+               (dom/button
+                 #js {:onClick (fn [_]
+                                 (om/transact! this `[(global/reset)]))}
+                 "RESET !")))))
 
 (om/add-root! reconciler AnimalsList (gdom/getElement "app"))
 
