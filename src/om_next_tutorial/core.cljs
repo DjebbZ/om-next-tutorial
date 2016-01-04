@@ -11,10 +11,6 @@
 
 
 
-;;; Blabla
-
-(declare reconciler AnimalsList)
-
 ;;; Data management
 
 ; State
@@ -28,7 +24,6 @@
 (defn reset-state! []
   (reset! app-state initial-state))
 
-; Read
 
 (defmulti read-fn om/dispatch)
 
@@ -45,7 +40,6 @@
                   start
                   (min end (count (:animals/list @state))))})
 
-; Mutate
 
 (defmulti mutate-fn om/dispatch)
 
@@ -58,6 +52,7 @@
 (defmethod mutate-fn 'global/reset
   [_ _ _]
   {:action reset-state!})
+
 
 (def reconciler
   (om/reconciler {:state  app-state
@@ -85,14 +80,11 @@
                       (map
                         (fn [[i name]]
                           (dom/li nil
-                                  [i
-                                   " "
-                                   name
-                                   " "
+                                  [i " " name " "
                                    (dom/a
                                      #js {:href    "#"
-                                                   :key     i
-                                                   :onClick (fn [e]
+                                          :key     i
+                                          :onClick (fn [e]
                                                      (.preventDefault e)
                                                      (om/transact! this `[(animal/remove ~{:animal [i name]})]))}
                                      "x")]))
@@ -103,4 +95,3 @@
                  "RESET !")))))
 
 (om/add-root! reconciler AnimalsList (gdom/getElement "app"))
-
