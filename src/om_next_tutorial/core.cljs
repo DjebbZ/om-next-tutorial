@@ -88,14 +88,14 @@
                                   [i
                                    " "
                                    name
+                                   " "
                                    (dom/a
                                      #js {:href    "#"
-                                          :key     i
-                                          :onClick (fn [e]
+                                                   :key     i
+                                                   :onClick (fn [e]
                                                      (.preventDefault e)
                                                      (om/transact! this `[(animal/remove ~{:animal [i name]})]))}
-                                     " "
-                                     "remove")]))
+                                     "x")]))
                         list))
                (dom/button
                  #js {:onClick (fn [_]
