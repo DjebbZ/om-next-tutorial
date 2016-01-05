@@ -13,85 +13,104 @@
 
 ;;; Data management
 
-; State
+(def initial-state
+  {:list/one [{:name "John" :points 0}
+              {:name "Mary" :points 0}
+              {:name "Bob" :points 0}]
+   :list/two [{:name "Mary" :points 0 :age 27}
+              {:name "Gwen" :points 0}
+              {:name "Jeff" :points 0}]})
 
-(def initial-state {:app/title    "Animals"
-                    :animals/list [[1 "Ant"] [2 "Antelope"] [3 "Bird"] [4 "Cat"] [5 "Dog"]
-                                   [6 "Lion"] [7 "Mouse"] [8 "Monkey"] [9 "Snake"] [10 "Zebra"]]})
+(defmulti read om/dispatch)
 
-(defonce app-state (atom initial-state))
-
-(defn reset-state! []
-  (reset! app-state initial-state))
-
-
-(defmulti read-fn om/dispatch)
-
-(defmethod read-fn :default
-  [{:keys [state]} key _]
+(defn get-people [state key]
   (let [st @state]
-    (if-let [[_ value] (find st key)]
-      {:value value}
-      {:value :not-found})))
+    (into [] (map #(get-in st %)) (get st key))))
 
-(defmethod read-fn :animals/list
-  [{:keys [state]} _ {:keys [start end]}]
-  {:value (subvec (:animals/list @state)
-                  start
-                  (min end (count (:animals/list @state))))})
+(defmethod read :list/one
+  [{:keys [state]} key params]
+  {:value (get-people state key)})
+
+(defmethod read :list/two
+  [{:keys [state]} key params]
+  {:value (get-people state key)})
 
 
-(defmulti mutate-fn om/dispatch)
+(defmulti mutate om/dispatch)
 
-(defmethod mutate-fn 'animal/remove
-  [{:keys [state]} _ {:keys [animal]}]
+(defmethod mutate 'points/increment
+  [{:keys [state]} _ {:keys [name]}]
   {:action (fn []
-             (swap! state update-in [:animals/list] (fn [st]
-                                                      (into [] (remove #(= % animal) st)))))})
+             (swap! state update-in
+                    [:person/by-name name :points]
+                    inc))})
 
-(defmethod mutate-fn 'global/reset
-  [_ _ _]
-  {:action reset-state!})
+(defmethod mutate 'points/decrement
+  [{:keys [state]} _ {:keys [name]}]
+  {:action (fn []
+             (swap! state update-in
+                    [:person/by-name name :points]
+                    #(let [n (dec %)] (max n 0))))})
 
+;; UI
 
-(def reconciler
-  (om/reconciler {:state  app-state
-                  :parser (om/parser {:read read-fn :mutate mutate-fn})}))
-
-
-
-;;; UI
-
-(defui AnimalsList
-  static om/IQueryParams
-  (params [_]
-    {:start 0 :end 10})
+(defui Person
+  static om/Ident
+  (ident [this {:keys [name]}]
+    [:person/by-name name])
 
   static om/IQuery
-  (query [_]
-    '[:app/title (:animals/list {:start ?start :end ?end})])
+  (query [this]
+    '[:name :points])
 
   Object
   (render [this]
-    (let [{:keys [app/title animals/list]} (om/props this)]
-      (dom/div nil
-               (dom/h2 nil title)
-               (apply dom/ul nil
-                      (map
-                        (fn [[i name]]
-                          (dom/li nil
-                                  [i " " name " "
-                                   (dom/a
-                                     #js {:href    "#"
-                                          :key     i
-                                          :onClick (fn [e]
-                                                     (.preventDefault e)
-                                                     (om/transact! this `[(animal/remove ~{:animal [i name]})]))}
-                                     "x")]))
-                        list))
-               (dom/button
-                 #js {:onClick (fn [_]
-                                 (om/transact! this `[(global/reset)]))}
-                 "RESET !")))))
+    (println "Render Person" (-> this om/props :name))
+    (let [{:keys [points name] :as props} (om/props this)]
+      (dom/li nil
+              (dom/label nil (str name ", points: " points))
+              (dom/button
+                #js {:onClick (fn [_]
+                                (om/transact! this `[(points/increment ~props)]))}
+                "+")
+              (dom/button
+                #js {:onClick (fn [_]
+                                (om/transact! this `[(points/decrement ~props)]))}
+                "-")))))
 
-(om/add-root! reconciler AnimalsList (gdom/getElement "app"))
+(def person (om/factory Person {:keyfn :name}))
+
+
+(defui ListView
+  Object
+  (render [this]
+    (println "Render ListView" (-> this om/path first))
+    (let [list (om/props this)]
+      (apply dom/ul nil
+             (map person list)))))
+
+(def list-view (om/factory ListView))
+
+
+(defui RootView
+  static om/IQuery
+  (query [this]
+    (let [subquery (om/get-query Person)]
+      `[{:list/one ~subquery} {:list/two ~subquery}]))
+
+  Object
+  (render [this]
+    (println "Render RootView")
+    (let [{:keys [list/one list/two]} (om/props this)]
+      (apply dom/div nil
+             [(dom/h2 nil "List One")
+              (list-view one)
+              (dom/h2 nil "List Two")
+              (list-view two)]))))
+
+
+(def reconciler (om/reconciler {:state initial-state
+                                :parser (om/parser {:read read :mutate mutate})}))
+
+(om/add-root! reconciler
+              RootView (gdom/getElement "app"))
